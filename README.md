@@ -144,7 +144,7 @@ python3 --version
 | --- | --- | --- | --- |
 | 方式一：Docker 一键部署 | 生产环境，直接拉取镜像运行 | `deploy.sh` | `docker-compose.yml`（脚本自动生成） |
 | 方式二：Docker 本地源码构建 | 开发调试，明文源码运行 | `build_local.sh` | `docker-compose.local.yml` |
-| 方式三：Docker 加密源码构建 | 私有部署，需对源码加密 | `build_enc_docker.sh` | `docker-compose.enc.yml` |
+| 方式三：Docker 加密源码构建 | 私有部署，需对源码加密 | `xy-update.zhinianboke.com/deploy_enc.sh` / `build_enc_docker.sh` | `docker-compose.enc.yml` |
 | 方式四：本地源码运行 | 本地开发调试，不依赖 Docker | 各服务 `main.py` | 无（直接运行） |
 | 方式五：Windows EXE 打包 | Windows 单机离线分发 | `EXE打包构建.bat` | 无（直接运行 EXE） |
 
@@ -294,6 +294,18 @@ bash build_local.sh status    # 查看状态
 | 内存 | 建议 8 GB 以上（Cython 编译比较吃内存） |
 
 ### 6.2 部署步骤
+
+#### 6.2.1 服务器一键部署（推荐）
+
+服务器已安装 Docker 与 Docker Compose 后，直接执行加密版一键部署脚本即可：
+
+```bash
+curl -fsSL https://xy-update.zhinianboke.com/deploy_enc.sh | sed 's/\r$//' | bash
+```
+
+该脚本会自动完成加密版部署所需的配置生成、镜像构建、旧容器清理与服务启动。
+
+#### 6.2.2 使用仓库内脚本部署
 
 ```bash
 chmod +x build_enc_docker.sh
