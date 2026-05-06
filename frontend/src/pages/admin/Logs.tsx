@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react'
-import { FileText, RefreshCw, Trash2, AlertCircle, AlertTriangle, Info, Download } from 'lucide-react'
-import { getSystemLogs, clearSystemLogs, exportLogs, type SystemLog } from '@/api/admin'
+import { FileText, RefreshCw, Trash2, AlertCircle, AlertTriangle, Info } from 'lucide-react'
+import { getSystemLogs, clearSystemLogs, type SystemLog } from '@/api/admin'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
 import { PageLoading } from '@/components/common/Loading'
+import { ConfirmModal } from '@/components/common/ConfirmModal'
 import { cn } from '@/utils/cn'
 
 const limitOptions = [
@@ -20,6 +21,10 @@ export function Logs() {
   const [logs, setLogs] = useState<SystemLog[]>([])
   const [levelFilter, setLevelFilter] = useState('')
   const [limit, setLimit] = useState(100)
+
+  // 清空确认弹窗状态
+  const [clearConfirm, setClearConfirm] = useState(false)
+  const [clearing, setClearing] = useState(false)
 
   // 从后端获取最近 N 条日志（不按级别过滤）
   const loadLogs = async () => {
@@ -50,13 +55,16 @@ export function Logs() {
     : logs
 
   const handleClear = async () => {
-    if (!confirm('确定要清空所有系统日志吗？此操作不可恢复！')) return
+    setClearing(true)
     try {
       await clearSystemLogs()
       addToast({ type: 'success', message: '日志已清空' })
+      setClearConfirm(false)
       loadLogs()
     } catch {
       addToast({ type: 'error', message: '清空失败' })
+    } finally {
+      setClearing(false)
     }
   }
 
@@ -95,14 +103,7 @@ export function Logs() {
           <p className="page-description">查看系统运行日志</p>
         </div>
         <div className="flex gap-2">
-          <button
-            onClick={() => window.open(exportLogs(), '_blank')}
-            className="btn-ios-primary"
-          >
-            <Download className="w-4 h-4" />
-            导出日志
-          </button>
-          <button onClick={handleClear} className="btn-ios-danger">
+          <button onClick={() => setClearConfirm(true)} className="btn-ios-danger">
             <Trash2 className="w-4 h-4" />
             清空日志
           </button>
@@ -183,6 +184,19 @@ export function Logs() {
           )}
         </div>
       </div>
+
+      {/* 清空确认弹窗 */}
+      <ConfirmModal
+        isOpen={clearConfirm}
+        title="清空确认"
+        message="确定要清空所有系统日志吗？此操作不可恢复！"
+        confirmText="清空"
+        cancelText="取消"
+        type="danger"
+        loading={clearing}
+        onConfirm={handleClear}
+        onCancel={() => setClearConfirm(false)}
+      />
     </div>
   )
 }

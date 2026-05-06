@@ -1,5 +1,8 @@
 import { post } from '@/utils/request'
 
+// API前缀
+const SEARCH_PREFIX = '/api/v1/items'
+
 // 搜索结果项类型
 export interface SearchResultItem {
   item_id: string
@@ -25,7 +28,7 @@ export const searchItems = async (
     data?: SearchResultItem[]
     total?: number
     error?: string 
-  }>('/items/search', { keyword, page, page_size: pageSize })
+  }>(`${SEARCH_PREFIX}/search`, { keyword, page, page_size: pageSize })
   return { 
     success: result.success, 
     data: result.data || [], 

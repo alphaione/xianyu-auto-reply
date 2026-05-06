@@ -1,9 +1,15 @@
 import { get, post, put } from '@/utils/request'
 import type { Keyword, ApiResponse } from '@/types'
 
+const KEYWORD_PREFIX = '/api/v1/keywords-with-item-id'
+
 // 获取关键词列表（包含 item_id 和 type）
-export const getKeywords = (cookieId: string): Promise<Keyword[]> => {
-  return get(`/keywords-with-item-id/${cookieId}`)
+export const getKeywords = (cookieId?: string): Promise<Keyword[]> => {
+  // 如果没有传cookieId，查询所有账号的关键词
+  if (!cookieId) {
+    return get(`${KEYWORD_PREFIX}`)
+  }
+  return get(`${KEYWORD_PREFIX}/${cookieId}`)
 }
 
 // 保存关键词列表（替换整个列表）
@@ -16,9 +22,9 @@ export const saveKeywords = (cookieId: string, keywords: Keyword[]): Promise<Api
     .map(k => ({
       keyword: k.keyword,
       reply: k.reply || '',
-      item_id: k.item_id || ''
+      item_id: k.item_id || '',
     }))
-  return post(`/keywords-with-item-id/${cookieId}`, { keywords: textKeywords })
+  return post(`${KEYWORD_PREFIX}/${cookieId}`, { keywords: textKeywords })
 }
 
 // 添加关键词（先获取列表，添加后保存）
@@ -36,7 +42,7 @@ export const addKeyword = async (cookieId: string, data: Partial<Keyword>): Prom
     keyword: data.keyword || '',
     reply: data.reply || '',
     item_id: data.item_id || '',
-    type: 'text'
+    type: 'text',
   } as Keyword)
   return saveKeywords(cookieId, keywords)
 }
@@ -48,92 +54,125 @@ export const updateKeyword = async (
   oldItemId: string,
   data: Partial<Keyword>
 ): Promise<ApiResponse> => {
-  const keywords = await getKeywords(cookieId)
-  const index = keywords.findIndex(k => 
-    k.keyword === oldKeyword && 
-    (k.item_id || '') === (oldItemId || '')
-  )
-  if (index === -1) {
-    return { success: false, message: '关键词不存在' }
+  const params = new URLSearchParams()
+  if (oldItemId) {
+    params.append('old_item_id', oldItemId)
   }
-  // 检查新关键词是否与其他关键词重复
-  if (data.keyword !== oldKeyword || data.item_id !== oldItemId) {
-    const duplicate = keywords.some((k, i) => 
-      i !== index && 
-      k.keyword === data.keyword && 
-      (k.item_id || '') === (data.item_id || '')
-    )
-    if (duplicate) {
-      return { success: false, message: '该关键词已存在' }
-    }
-  }
-  keywords[index] = { ...keywords[index], ...data }
-  return saveKeywords(cookieId, keywords)
+  const url = `${KEYWORD_PREFIX}/${cookieId}/${encodeURIComponent(oldKeyword)}${params.toString() ? '?' + params.toString() : ''}`
+  return put(url, {
+    account_id: data.account_id || cookieId,
+    keyword: data.keyword || '',
+    reply: data.reply || '',
+    item_id: data.item_id || '',
+  })
 }
 
-// 删除关键词
+// 删除关键词（支持文本和图片类型）
 export const deleteKeyword = async (
   cookieId: string, 
   keyword: string, 
   itemId: string
 ): Promise<ApiResponse> => {
-  const keywords = await getKeywords(cookieId)
-  const filtered = keywords.filter(k => 
-    !(k.keyword === keyword && (k.item_id || '') === (itemId || ''))
-  )
-  if (filtered.length === keywords.length) {
-    return { success: false, message: '关键词不存在' }
+  // 使用新的删除API，支持删除文本和图片类型的关键词
+  const params = new URLSearchParams()
+  if (itemId) {
+    params.append('item_id', itemId)
   }
+  const url = `${KEYWORD_PREFIX}/${cookieId}/${encodeURIComponent(keyword)}${params.toString() ? '?' + params.toString() : ''}`
+  
+  const token = localStorage.getItem('auth_token')
+  const response = await fetch(url, {
+    method: 'DELETE',
+    headers: { 
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  })
+  
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ message: '删除失败' }))
+    return { success: false, message: error.message || error.detail || '删除失败' }
+  }
+  
+  return await response.json()
+}
+
+// 批量添加关键词 - 通过 saveKeywords 实现
+export const batchAddKeywords = async (cookieId: string, keywords: Partial<Keyword>[]): Promise<ApiResponse> => {
+  const existing = await getKeywords(cookieId)
+  const newKeywords = [...existing, ...keywords.map(k => ({
+    keyword: k.keyword || '',
+    reply: k.reply || '',
+    item_id: k.item_id || '',
+    type: 'text' as const,
+  }))]
+  return saveKeywords(cookieId, newKeywords)
+}
+
+// 批量删除关键词 - 通过 saveKeywords 实现
+export const batchDeleteKeywords = async (cookieId: string, keywordIds: string[]): Promise<ApiResponse> => {
+  const existing = await getKeywords(cookieId)
+  const filtered = existing.filter(k => !keywordIds.includes(k.keyword))
   return saveKeywords(cookieId, filtered)
 }
 
-// 批量添加关键词
-export const batchAddKeywords = (cookieId: string, keywords: Partial<Keyword>[]): Promise<ApiResponse> => {
-  return post(`/keywords/${cookieId}/batch`, { keywords })
+// 默认回复API前缀
+const DEFAULT_REPLY_PREFIX = '/api/v1/default-replies'
+
+// 获取默认回复设置
+export const getDefaultReply = async (cookieId: string): Promise<{ default_reply: string; reply_image: string; enabled: boolean; reply_once: boolean }> => {
+  const result = await get<{ enabled: boolean; reply_content: string; reply_image: string; reply_once: boolean }>(`${DEFAULT_REPLY_PREFIX}/${cookieId}`)
+  return {
+    default_reply: result.reply_content || '',
+    reply_image: result.reply_image || '',
+    enabled: result.enabled || false,
+    reply_once: result.reply_once || false,
+  }
 }
 
-// 批量删除关键词
-export const batchDeleteKeywords = (cookieId: string, keywordIds: string[]): Promise<ApiResponse> => {
-  return post(`/keywords/${cookieId}/batch-delete`, { keyword_ids: keywordIds })
-}
-
-// 获取默认回复
-export const getDefaultReply = (cookieId: string): Promise<{ enabled?: boolean; reply_content?: string; reply_once?: boolean; reply_image_url?: string }> => {
-  return get(`/default-reply/${cookieId}`)
-}
-
-// 更新默认回复
-export const updateDefaultReply = (cookieId: string, replyContent: string, enabled: boolean = true, replyOnce: boolean = false, replyImageUrl: string = ''): Promise<ApiResponse> => {
-  return put(`/default-reply/${cookieId}`, { 
-    enabled, 
-    reply_content: replyContent,
+// 更新默认回复设置
+export const updateDefaultReply = async (
+  cookieId: string,
+  defaultReply: string,
+  enabled: boolean = true,
+  replyOnce: boolean = false,
+  replyImage: string = ''
+): Promise<ApiResponse> => {
+  return put(`${DEFAULT_REPLY_PREFIX}/${cookieId}`, {
+    enabled,
+    reply_content: defaultReply,
+    reply_image: replyImage,
     reply_once: replyOnce,
-    reply_image_url: replyImageUrl
   })
 }
 
-// 导出关键词（Excel/模板），返回 Blob 供前端触发下载
+// 上传默认回复图片
+export const uploadDefaultReplyImage = async (cookieId: string, image: File): Promise<{ success: boolean; image_url?: string; message?: string }> => {
+  const formData = new FormData()
+  formData.append('image', image)
+  return post(`${DEFAULT_REPLY_PREFIX}/${cookieId}/upload-image`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+}
+
+// 导出关键词
 export const exportKeywords = async (cookieId: string): Promise<Blob> => {
   const token = localStorage.getItem('auth_token')
-  const response = await fetch(`/keywords-export/${cookieId}`, {
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
+  const response = await fetch(`${KEYWORD_PREFIX}/${cookieId}/export`, {
+    headers: { Authorization: `Bearer ${token}` }
   })
-  if (!response.ok) {
-    throw new Error('导出失败')
-  }
+  if (!response.ok) throw new Error('导出失败')
   return response.blob()
 }
 
-// 导入关键词（Excel），上传文件并返回导入结果
+// 导入关键词
 export const importKeywords = async (
   cookieId: string,
   file: File
 ): Promise<ApiResponse<{ added: number; updated: number }>> => {
   const formData = new FormData()
   formData.append('file', file)
-  return post<ApiResponse<{ added: number; updated: number }>>(`/keywords-import/${cookieId}`, formData, {
+  return post<ApiResponse<{ added: number; updated: number }>>(`${KEYWORD_PREFIX}/${cookieId}/import`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }
@@ -151,7 +190,7 @@ export const addImageKeyword = async (
   if (itemId) {
     formData.append('item_id', itemId)
   }
-  return post(`/keywords/${cookieId}/image`, formData, {
+  return post(`${KEYWORD_PREFIX}/${cookieId}/image`, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
 }

@@ -3,6 +3,9 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { X, Home } from 'lucide-react'
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
+import { getMenuAccessFallbackPath, isPathBlockedForUser } from '@/config/navigation'
+import { useAuthStore } from '@/store/authStore'
+import { useMenuVisibilityStore } from '@/store/menuVisibilityStore'
 import { cn } from '@/utils/cn'
 
 interface Tab {
@@ -28,21 +31,56 @@ const routeTitles: Record<string, string> = {
   '/accounts': '账号管理',
   '/items': '商品管理',
   '/keywords': '自动回复',
-  '/item-replies': '指定商品回复',
   '/orders': '订单管理',
-  '/cards': '卡券管理',
-  '/delivery': '自动发货',
+  '/message-logs': '消息日志',
+  '/risk-logs': '风控日志',
   '/notification-channels': '通知渠道',
   '/message-notifications': '消息通知',
   '/item-search': '商品搜索',
+  '/goofish-compass': '数据罗盘',
+  '/goofish-scheduled-crawler': '定时采集',
   '/settings': '系统设置',
+  '/message-filters': '消息过滤',
+  '/online-chat': '在线聊天',
+  '/online-chat-new': '在线聊天',
+  '/feedback': '意见反馈',
+  '/ad-apply': '广告申请',
+  '/disclaimer': '免责声明',
+  '/tutorial': '使用教程',
   '/admin/users': '用户管理',
   '/admin/logs': '系统日志',
+  '/admin/auto-reply-logs': '消息日志',
   '/admin/risk-logs': '风控日志',
   '/admin/data': '数据管理',
-  '/disclaimer': '免责声明',
+  '/admin/redelivery-batches': '补发货日志',
+  '/admin/rate-batches': '补评价日志',
+  '/admin/polish-batches': '擦亮日志',
+  '/admin/login-renew-batches': '登录续期日志',
+  '/admin/cookies-refresh-batches': 'COOKIES刷新日志',
+  '/admin/close-notice-batches': '消息通知关闭日志',
+  '/admin/scheduled-tasks': '定时任务',
+  '/admin/announcements': '公告管理',
+  '/admin/ad-manage': '广告管理',
   '/about': '关于',
+  '/personal-settings': '个人设置',
+  '/cards': '卡券管理',
+  '/distribution/supply': '货源广场',
+  '/distribution/sources': '货源管理',
+  '/distribution/docked': '对接的商品',
+  '/distribution/dealers': '分销商管理',
+  '/distribution/sub-dealers': '下级分销商',
+  '/admin/fund-flows': '资金流水',
+  '/distribution/agent-orders': '代理订单',
+  '/accounts/shared-scan': '共享扫码登录',
+  '/shared-scan': '共享扫码登录',
+  '/product-publish/materials': '素材库',
+  '/product-publish/single': '单品发布',
+  '/product-publish/batch': '批量发布',
+  '/product-publish/addresses': '随机地址库',
+  '/product-publish/logs': '发布日志',
 }
+
+const hiddenAliasPaths = new Set(['/shared-scan'])
 
 export const useTabsStore = create<TabsStore>()(
   persist(
@@ -128,6 +166,8 @@ interface ContextMenuState {
 export function TabsBar() {
   const location = useLocation()
   const navigate = useNavigate()
+  const { user } = useAuthStore()
+  const { hiddenMenuKeys, isExeMode } = useMenuVisibilityStore()
   const { tabs, activeTab, addTab, removeTab, removeTabsToRight, removeTabsToLeft, removeAllTabs, setActiveTab } = useTabsStore()
   const [contextMenu, setContextMenu] = useState<ContextMenuState>({
     visible: false,
@@ -136,6 +176,8 @@ export function TabsBar() {
     targetPath: ''
   })
   const menuRef = useRef<HTMLDivElement>(null)
+  const isAdmin = Boolean(user?.is_admin)
+  const visibleTabs = tabs.filter((tab) => !hiddenAliasPaths.has(tab.path) && !isPathBlockedForUser(tab.path, hiddenMenuKeys, isAdmin, isExeMode))
 
   // 监听路由变化，自动添加标签
   useEffect(() => {
@@ -150,6 +192,21 @@ export function TabsBar() {
       })
     }
   }, [location.pathname])
+
+  useEffect(() => {
+    const blockedTabs = tabs.filter((tab) => tab.path !== '/dashboard' && (hiddenAliasPaths.has(tab.path) || isPathBlockedForUser(tab.path, hiddenMenuKeys, isAdmin, isExeMode)))
+    if (blockedTabs.length === 0) {
+      return
+    }
+
+    for (const tab of blockedTabs) {
+      removeTab(tab.path)
+    }
+
+    if (blockedTabs.some((tab) => tab.path === activeTab)) {
+      navigate(getMenuAccessFallbackPath(hiddenMenuKeys, isAdmin, isExeMode))
+    }
+  }, [tabs, hiddenMenuKeys, isAdmin, isExeMode, activeTab, navigate, removeTab])
 
   // 点击其他地方关闭右键菜单
   useEffect(() => {
@@ -173,9 +230,11 @@ export function TabsBar() {
     removeTab(path)
     
     if (activeTab === path) {
-      const remainingTabs = tabs.filter(t => t.path !== path)
-      if (remainingTabs.length > 0) {
-        navigate(remainingTabs[remainingTabs.length - 1].path)
+      const remainingVisibleTabs = visibleTabs.filter(t => t.path !== path)
+      if (remainingVisibleTabs.length > 0) {
+        navigate(remainingVisibleTabs[remainingVisibleTabs.length - 1].path)
+      } else {
+        navigate(getMenuAccessFallbackPath(hiddenMenuKeys, isAdmin, isExeMode))
       }
     }
   }
@@ -195,7 +254,7 @@ export function TabsBar() {
     if (targetPath !== '/dashboard') {
       removeTab(targetPath)
       if (activeTab === targetPath) {
-        navigate('/dashboard')
+        navigate(getMenuAccessFallbackPath(hiddenMenuKeys, isAdmin, isExeMode))
       }
     }
     setContextMenu(prev => ({ ...prev, visible: false }))
@@ -213,19 +272,19 @@ export function TabsBar() {
 
   const handleCloseAllTabs = () => {
     removeAllTabs()
-    navigate('/dashboard')
+    navigate(getMenuAccessFallbackPath(hiddenMenuKeys, isAdmin, isExeMode))
     setContextMenu(prev => ({ ...prev, visible: false }))
   }
 
-  const targetIndex = tabs.findIndex(t => t.path === contextMenu.targetPath)
-  const hasRightTabs = targetIndex < tabs.length - 1
-  const hasLeftTabs = targetIndex > 1 || (targetIndex === 1 && tabs[0].path === '/dashboard')
+  const targetIndex = visibleTabs.findIndex(t => t.path === contextMenu.targetPath)
+  const hasRightTabs = targetIndex < visibleTabs.length - 1
+  const hasLeftTabs = targetIndex > 1 || (targetIndex === 1 && visibleTabs[0]?.path === '/dashboard')
 
   return (
     <>
       <div className="tabs-bar overflow-x-auto scrollbar-hide">
         <div className="flex min-w-max">
-          {tabs.map((tab) => (
+          {visibleTabs.map((tab) => (
             <div
               key={tab.path}
               onClick={() => handleTabClick(tab.path)}

@@ -2,12 +2,13 @@ import { useState, useEffect } from 'react'
 import type { FormEvent } from 'react'
 import { motion } from 'framer-motion'
 import { Mail, RefreshCw, Plus, Trash2, Power, PowerOff, X, Loader2 } from 'lucide-react'
-import { getMessageNotifications, setMessageNotification, getNotificationChannels } from '@/api/notifications'
-import { getAccounts } from '@/api/accounts'
+import { getMessageNotifications, setMessageNotification, getNotificationChannels, deleteMessageNotification } from '@/api/notifications'
+import { getAccountDetails } from '@/api/accounts'
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
 import { PageLoading } from '@/components/common/Loading'
 import { Select } from '@/components/common/Select'
+import { ConfirmModal } from '@/components/common/ConfirmModal'
 import type { MessageNotification, NotificationChannel, Account } from '@/types'
 
 export function MessageNotifications() {
@@ -22,6 +23,10 @@ export function MessageNotifications() {
   const [formChannelId, setFormChannelId] = useState('')
   const [formEnabled, setFormEnabled] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  // 删除确认弹窗状态
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; notification: MessageNotification | null }>({ open: false, notification: null })
+  const [deleting, setDeleting] = useState(false)
 
   const loadNotifications = async () => {
     if (!_hasHydrated || !isAuthenticated || !token) return
@@ -53,7 +58,7 @@ export function MessageNotifications() {
   const loadAccounts = async () => {
     if (!_hasHydrated || !isAuthenticated || !token) return
     try {
-      const data = await getAccounts()
+      const data = await getAccountDetails()
       setAccounts(data)
     } catch {
       // ignore
@@ -78,15 +83,16 @@ export function MessageNotifications() {
   }
 
   const handleDelete = async (notification: MessageNotification) => {
-    if (!confirm('确定要删除这个消息通知吗？')) return
+    setDeleting(true)
     try {
-      // 后端删除接口需要 notification_id，但我们没有这个字段
-      // 改为禁用该通知
-      await setMessageNotification(notification.cookie_id, notification.channel_id, false)
-      addToast({ type: 'success', message: '通知已禁用' })
+      await deleteMessageNotification(String(notification.id))
+      addToast({ type: 'success', message: '通知已删除' })
+      setDeleteConfirm({ open: false, notification: null })
       loadNotifications()
     } catch {
-      addToast({ type: 'error', message: '操作失败' })
+      addToast({ type: 'error', message: '删除失败' })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -186,7 +192,12 @@ export function MessageNotifications() {
               ) : (
                 notifications.map((notification) => (
                   <tr key={`${notification.cookie_id}-${notification.channel_id}`}>
-                    <td className="font-medium text-blue-600 dark:text-blue-400">{notification.cookie_id}</td>
+                    <td className="font-medium text-blue-600 dark:text-blue-400">
+                      {(() => {
+                        const account = accounts.find(acc => acc.id === notification.cookie_id)
+                        return account?.note ? `${notification.cookie_id} (${account.note})` : notification.cookie_id
+                      })()}
+                    </td>
                     <td className="text-sm">
                       {notification.channel_name || `渠道 ${notification.channel_id}`}
                     </td>
@@ -211,7 +222,7 @@ export function MessageNotifications() {
                           )}
                         </button>
                         <button
-                          onClick={() => handleDelete(notification)}
+                          onClick={() => setDeleteConfirm({ open: true, notification })}
                           className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                           title="删除"
                         >
@@ -230,7 +241,7 @@ export function MessageNotifications() {
       {/* 添加通知弹窗 */}
       {isModalOpen && (
         <div className="modal-overlay">
-          <div className="modal-content max-w-md">
+          <div className="modal-content max-w-lg min-h-[400px]">
             <div className="modal-header flex items-center justify-between">
               <h2 className="text-lg font-semibold">添加消息通知</h2>
               <button onClick={closeModal} className="p-1 hover:bg-gray-100 dark:hover:bg-slate-700 rounded-lg">
@@ -245,10 +256,11 @@ export function MessageNotifications() {
                     value={formAccountId}
                     onChange={setFormAccountId}
                     options={[
-                      { value: '', label: '请选择账号' },
+                      { value: '', label: '请选择账号', key: 'empty' },
                       ...accounts.map((account) => ({
                         value: account.id,
-                        label: account.id,
+                        label: account.note ? `${account.id} (${account.note})` : account.id,
+                        key: account.pk?.toString() || account.id,
                       })),
                     ]}
                     placeholder="请选择账号"
@@ -305,6 +317,19 @@ export function MessageNotifications() {
           </div>
         </div>
       )}
+
+      {/* 删除确认弹窗 */}
+      <ConfirmModal
+        isOpen={deleteConfirm.open}
+        title="删除确认"
+        message="确定要删除这个消息通知吗？"
+        confirmText="删除"
+        cancelText="取消"
+        type="danger"
+        loading={deleting}
+        onConfirm={() => deleteConfirm.notification && handleDelete(deleteConfirm.notification)}
+        onCancel={() => setDeleteConfirm({ open: false, notification: null })}
+      />
     </div>
   )
 }

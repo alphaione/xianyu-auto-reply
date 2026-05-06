@@ -6,6 +6,7 @@ export interface SelectOption {
   value: string
   label: string
   disabled?: boolean
+  key?: string  // 自定义 key，用于 React 列表渲染
 }
 
 interface SelectProps {
@@ -127,7 +128,7 @@ export function Select({
           ) : (
             options.map((option) => (
               <button
-                key={option.value}
+                key={option.key || option.value}
                 type="button"
                 onClick={() => {
                   if (!option.disabled) {

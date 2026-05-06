@@ -13,8 +13,45 @@ export function DisclaimerContent() {
           数据存储说明
         </h3>
         <p className="text-sm mb-3">
-          本系统在运行过程中，开源版不会存储用户任何数据，爱信不信
+          本系统在运行过程中，为保障服务正常运行，会存储以下用户数据：
         </p>
+        
+        <div className="space-y-3 text-sm">
+          <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
+            <h4 className="font-medium text-slate-900 dark:text-white">1. 账号密码</h4>
+            <ul className="mt-1 space-y-1 text-slate-600 dark:text-slate-400">
+              <li>• 系统会保存用户的账号和密码信息</li>
+              <li>• 用于自动登录和维持会话状态</li>
+              <li>• 账号密码数据仅存储在本地服务器，不会上传至第三方</li>
+            </ul>
+          </div>
+          
+          <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
+            <h4 className="font-medium text-slate-900 dark:text-white">2. Cookie 数据</h4>
+            <ul className="mt-1 space-y-1 text-slate-600 dark:text-slate-400">
+              <li>• 系统会保存用户的登录 Cookie 信息</li>
+              <li>• 用于维持用户登录状态和自动化操作</li>
+              <li>• Cookie 数据仅存储在本地服务器，不会上传至第三方</li>
+            </ul>
+          </div>
+          
+          <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
+            <h4 className="font-medium text-slate-900 dark:text-white">3. 商品信息</h4>
+            <ul className="mt-1 space-y-1 text-slate-600 dark:text-slate-400">
+              <li>• 系统会保存用户发布的商品相关信息</li>
+              <li>• 包括但不限于：商品标题、描述、价格、图片等</li>
+              <li>• 用于商品管理和自动回复功能</li>
+            </ul>
+          </div>
+          
+          <div className="bg-slate-50 dark:bg-slate-700/50 rounded-lg p-3">
+            <h4 className="font-medium text-slate-900 dark:text-white">4. 卡券信息</h4>
+            <ul className="mt-1 space-y-1 text-slate-600 dark:text-slate-400">
+              <li>• 系统会保存用户配置的卡券/卡密信息</li>
+              <li>• 用于自动发货和订单处理功能</li>
+            </ul>
+          </div>
+        </div>
       </section>
 
       {/* 用户须知 */}
@@ -40,6 +77,7 @@ export function DisclaimerContent() {
         </h3>
         <ul className="space-y-1 text-sm">
           <li>• 所有用户数据仅用于本系统功能运行</li>
+          <li>• 不会将用户数据出售或分享给第三方</li>
           <li>• 用户可随时自行删除其存储的数据</li>
         </ul>
       </section>

@@ -6,17 +6,90 @@ import { getNotificationChannels, deleteNotificationChannel, updateNotificationC
 import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
 import { PageLoading } from '@/components/common/Loading'
+import { ConfirmModal } from '@/components/common/ConfirmModal'
 import type { NotificationChannel } from '@/types'
 
 // 所有支持的渠道类型配置
 const channelTypes = [
-  { type: 'dingtalk', label: '钉钉通知', desc: '钉钉机器人消息', icon: Bell, placeholder: '{"webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=..."}' },
-  { type: 'feishu', label: '飞书通知', desc: '飞书机器人消息', icon: Send, placeholder: '{"webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/..."}' },
-  { type: 'bark', label: 'Bark通知', desc: 'iOS推送通知', icon: Smartphone, placeholder: '{"device_key": "xxx", "server_url": "https://api.day.app"}' },
-  { type: 'email', label: '邮件通知', desc: 'SMTP邮件发送', icon: Mail, placeholder: '{"smtp_server": "...", "smtp_port": 587, "email_user": "...", "email_password": "...", "recipient_email": "..."}' },
-  { type: 'webhook', label: 'Webhook', desc: '自定义HTTP请求', icon: Link, placeholder: '{"webhook_url": "https://..."}' },
-  { type: 'wechat', label: '微信通知', desc: '企业微信机器人', icon: MessageCircle, placeholder: '{"webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."}' },
-  { type: 'telegram', label: 'Telegram', desc: 'Telegram机器人', icon: Send, placeholder: '{"bot_token": "...", "chat_id": "..."}' },
+  { 
+    type: 'dingtalk', 
+    label: '钉钉通知', 
+    desc: '钉钉机器人消息', 
+    icon: Bell, 
+    placeholder: '{"webhook_url": "https://oapi.dingtalk.com/robot/send?access_token=..."}',
+    defaultConfig: {
+      webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=你的access_token",
+      secret: ""
+    }
+  },
+  { 
+    type: 'feishu', 
+    label: '飞书通知', 
+    desc: '飞书机器人消息', 
+    icon: Send, 
+    placeholder: '{"webhook_url": "https://open.feishu.cn/open-apis/bot/v2/hook/..."}',
+    defaultConfig: {
+      webhook_url: "https://open.feishu.cn/open-apis/bot/v2/hook/你的hook_id"
+    }
+  },
+  { 
+    type: 'bark', 
+    label: 'Bark通知', 
+    desc: 'iOS推送通知', 
+    icon: Smartphone, 
+    placeholder: '{"device_key": "xxx", "server_url": "https://api.day.app"}',
+    defaultConfig: {
+      device_key: "你的设备密钥",
+      server_url: "https://api.day.app"
+    }
+  },
+  { 
+    type: 'email', 
+    label: '邮件通知', 
+    desc: 'SMTP邮件发送', 
+    icon: Mail, 
+    placeholder: '{"smtp_server": "...", "smtp_port": 587, "email_user": "...", "email_password": "...", "recipient_email": "..."}',
+    defaultConfig: {
+      smtp_server: "smtp.qq.com",
+      smtp_port: 587,
+      email_user: "你的邮箱@qq.com",
+      email_password: "你的授权码",
+      recipient_email: "接收邮箱@example.com"
+    }
+  },
+  { 
+    type: 'webhook', 
+    label: 'Webhook', 
+    desc: '自定义HTTP请求', 
+    icon: Link, 
+    placeholder: '{"webhook_url": "https://..."}',
+    defaultConfig: {
+      webhook_url: "https://你的webhook地址",
+      method: "POST",
+      headers: {}
+    }
+  },
+  { 
+    type: 'wechat', 
+    label: '微信通知', 
+    desc: '企业微信机器人', 
+    icon: MessageCircle, 
+    placeholder: '{"webhook_url": "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=..."}',
+    defaultConfig: {
+      webhook_url: "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=你的key"
+    }
+  },
+  { 
+    type: 'telegram', 
+    label: 'Telegram', 
+    desc: 'Telegram机器人', 
+    icon: Send, 
+    placeholder: '{"bot_token": "...", "chat_id": "..."}',
+    defaultConfig: {
+      bot_token: "你的Bot_Token",
+      chat_id: "你的Chat_ID"
+    }
+  },
 ] as const
 
 type ChannelType = typeof channelTypes[number]['type']
@@ -37,6 +110,10 @@ export function NotificationChannels() {
   const [formConfig, setFormConfig] = useState('')
   const [formEnabled, setFormEnabled] = useState(true)
   const [saving, setSaving] = useState(false)
+
+  // 删除确认弹窗状态
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string | null }>({ open: false, id: null })
+  const [deleting, setDeleting] = useState(false)
 
   const loadChannels = async () => {
     if (!_hasHydrated || !isAuthenticated || !token) {
@@ -105,13 +182,16 @@ export function NotificationChannels() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确定要删除这个通知渠道吗？')) return
+    setDeleting(true)
     try {
       await deleteNotificationChannel(id)
       addToast({ type: 'success', message: '删除成功' })
+      setDeleteConfirm({ open: false, id: null })
       loadChannels()
     } catch {
       addToast({ type: 'error', message: '删除失败' })
+    } finally {
+      setDeleting(false)
     }
   }
 
@@ -121,17 +201,30 @@ export function NotificationChannels() {
     setSelectedType(type)
     setEditingChannel(null)
     setFormName(typeConfig?.label || '')
-    setFormConfig('')
+    // 新建时默认填充样例配置
+    if (typeConfig?.defaultConfig) {
+      setFormConfig(JSON.stringify(typeConfig.defaultConfig, null, 2))
+    } else {
+      setFormConfig('')
+    }
     setFormEnabled(true)
     setIsModalOpen(true)
   }
 
   // 打开编辑弹窗
   const openEditModal = (channel: NotificationChannel) => {
+    const typeConfig = channelTypes.find(c => c.type === channel.type)
     setSelectedType(channel.type as ChannelType)
     setEditingChannel(channel)
     setFormName(channel.name)
-    setFormConfig(JSON.stringify(channel.config || {}, null, 2))
+    // 编辑时如果配置为空，也填充默认样例
+    if (channel.config && Object.keys(channel.config).length > 0) {
+      setFormConfig(JSON.stringify(channel.config, null, 2))
+    } else if (typeConfig?.defaultConfig) {
+      setFormConfig(JSON.stringify(typeConfig.defaultConfig, null, 2))
+    } else {
+      setFormConfig('')
+    }
     setFormEnabled(channel.enabled)
     setIsModalOpen(true)
   }
@@ -211,7 +304,7 @@ export function NotificationChannels() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="page-title">通知渠道</h1>
-          <p className="page-description">管理消息通知渠道，支持QQ通知等多种方式</p>
+          <p className="page-description">管理消息通知渠道，支持钉钉、飞书、邮件等多种方式</p>
         </div>
         <button onClick={loadChannels} className="btn-ios-secondary">
           <RefreshCw className="w-4 h-4" />
@@ -337,7 +430,7 @@ export function NotificationChannels() {
                       <Edit2 className="w-4 h-4" />
                     </button>
                     <button
-                      onClick={() => handleDelete(channel.id)}
+                      onClick={() => setDeleteConfirm({ open: true, id: channel.id })}
                       className="p-1.5 rounded hover:bg-red-50 dark:hover:bg-red-900/30 text-red-500"
                       title="删除"
                     >
@@ -423,6 +516,19 @@ export function NotificationChannels() {
           </div>
         </div>
       )}
+
+      {/* 删除确认弹窗 */}
+      <ConfirmModal
+        isOpen={deleteConfirm.open}
+        title="删除确认"
+        message="确定要删除这个通知渠道吗？删除后无法恢复。"
+        confirmText="删除"
+        cancelText="取消"
+        type="danger"
+        loading={deleting}
+        onConfirm={() => deleteConfirm.id && handleDelete(deleteConfirm.id)}
+        onCancel={() => setDeleteConfirm({ open: false, id: null })}
+      />
     </div>
   )
 }

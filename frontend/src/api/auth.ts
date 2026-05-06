@@ -1,73 +1,137 @@
 import { post, get } from '@/utils/request'
-import type { LoginRequest, LoginResponse, ApiResponse } from '@/types'
+import { normalizeAuthFooterAdSettings, normalizeLoginBrandingSettings } from '@/api/settings'
+import type { AuthFooterAdSettings, LoginBrandingSettings, LoginRequest, LoginResponse, ApiResponse } from '@/types'
+
+const AUTH_PREFIX = '/api/v1/auth'
+const SYSTEM_PREFIX = '/api/v1/system-settings'
+const CAPTCHA_PREFIX = '/api/v1/captcha'
+const GEETEST_PREFIX = '/api/v1/geetest'
+
+// 缓存公共设置，避免重复请求
+let publicSettingsCache: Record<string, unknown> | null = null
+let publicSettingsPromise: Promise<Record<string, unknown>> | null = null
+
+/**
+ * 获取公共系统设置（带缓存）
+ * 同一页面生命周期内只请求一次
+ */
+const getPublicSettings = async (): Promise<Record<string, unknown>> => {
+  // 如果已有缓存，直接返回
+  if (publicSettingsCache) {
+    return publicSettingsCache
+  }
+  // 如果正在请求中，等待该请求完成
+  if (publicSettingsPromise) {
+    return publicSettingsPromise
+  }
+  // 发起新请求
+  publicSettingsPromise = get<Record<string, unknown>>(`${SYSTEM_PREFIX}/public`)
+    .then((settings) => {
+      publicSettingsCache = settings
+      return settings
+    })
+    .finally(() => {
+      publicSettingsPromise = null
+    })
+  return publicSettingsPromise
+}
 
 // 用户登录
 export const login = (data: LoginRequest): Promise<LoginResponse> => {
-  return post('/login', data)
+  return post(`${AUTH_PREFIX}/login`, data)
 }
 
 // 验证 Token
-export const verifyToken = (): Promise<{ authenticated: boolean; user_id?: number; username?: string; is_admin?: boolean }> => {
-  return get('/verify')
+export const verifyToken = (): Promise<{ authenticated: boolean; user_id?: number; username?: string; is_admin?: boolean; account_limit?: number | null }> => {
+  return get(`${AUTH_PREFIX}/verify`)
 }
 
 // 用户登出
 export const logout = (): Promise<ApiResponse> => {
-  return post('/logout')
+  return post(`${AUTH_PREFIX}/logout`)
 }
 
-// 获取注册状态
+// 获取注册状态 - 从系统设置获取
 export const getRegistrationStatus = async (): Promise<{ enabled: boolean }> => {
-  try {
-    const settings = await get<Record<string, any>>('/system-settings/public')
-    const value = settings.registration_enabled
-    return { enabled: value === true || value === 'true' || value === 1 || value === '1' }
-  } catch {
-    return { enabled: true }
-  }
+  const settings = await getPublicSettings()
+  // 处理多种可能的值类型：true, 'true', 1, '1'
+  const value = settings.registration_enabled
+  return { enabled: value === true || value === 'true' || value === 1 || value === '1' }
 }
 
-// 获取登录信息显示状态
+// 获取登录信息显示状态 - 从系统设置获取
 export const getLoginInfoStatus = async (): Promise<{ enabled: boolean }> => {
-  try {
-    const settings = await get<Record<string, any>>('/system-settings/public')
-    const value = settings.show_default_login_info
-    return { enabled: value === true || value === 'true' || value === 1 || value === '1' }
-  } catch {
+  const settings = await getPublicSettings()
+  // 处理多种可能的值类型：true, 'true', 1, '1'
+  const value = settings.show_default_login_info
+  return { enabled: value === true || value === 'true' || value === 1 || value === '1' }
+}
+
+// 获取登录验证码开关状态
+export const getLoginCaptchaStatus = async (): Promise<{ enabled: boolean }> => {
+  const settings = await getPublicSettings()
+  const value = settings.login_captcha_enabled
+  // 如果没有设置，默认开启
+  if (value === undefined || value === null) {
     return { enabled: true }
   }
+  return { enabled: value === true || value === 'true' || value === 1 || value === '1' }
+}
+
+// 获取登录页品牌配置
+export const getLoginBrandingSettings = async (): Promise<LoginBrandingSettings> => {
+  const settings = await getPublicSettings()
+  return normalizeLoginBrandingSettings(settings)
+}
+
+export const getAuthFooterAdSettings = async (): Promise<AuthFooterAdSettings> => {
+  const settings = await getPublicSettings()
+  return normalizeAuthFooterAdSettings(settings)
 }
 
 // 生成图形验证码
-export const generateCaptcha = (sessionId: string): Promise<{ success: boolean; captcha_image?: string }> => {
-  return post('/generate-captcha', { session_id: sessionId })
+export const generateCaptcha = async (sessionId: string): Promise<{ success: boolean; captcha_image?: string }> => {
+  const result = await post<{ success: boolean; data: { captcha_image: string; session_id: string }; message: string }>(
+    `${CAPTCHA_PREFIX}/generate`,
+    { session_id: sessionId }
+  )
+  return { success: result.success, captcha_image: result.data?.captcha_image }
 }
 
 // 验证图形验证码
-export const verifyCaptcha = (sessionId: string, captchaCode: string): Promise<{ success: boolean }> => {
-  return post('/verify-captcha', { session_id: sessionId, captcha_code: captchaCode })
+export const verifyCaptcha = async (sessionId: string, captchaCode: string): Promise<{ success: boolean }> => {
+  const result = await post<{ success: boolean; message: string }>(
+    `${CAPTCHA_PREFIX}/verify`,
+    { session_id: sessionId, captcha_code: captchaCode }
+  )
+  return { success: result.success }
 }
 
 // 发送邮箱验证码
-export const sendVerificationCode = (email: string, type: string, sessionId: string): Promise<ApiResponse> => {
-  return post('/send-verification-code', { email, type, session_id: sessionId })
+export const sendVerificationCode = async (email: string, type: string, sessionId: string): Promise<ApiResponse> => {
+  return post(`${CAPTCHA_PREFIX}/send-email-code`, { email, type, session_id: sessionId })
 }
 
-// 用户注册
+// 用户注册 - 使用新后端接口
 export const register = (data: { 
   username: string
   password: string
-  email: string
-  verification_code: string
-  session_id: string
+  email?: string
+  verification_code?: string
+  session_id?: string
 }): Promise<ApiResponse> => {
-  return post('/register', data)
+  return post(`${AUTH_PREFIX}/register`, {
+    username: data.username,
+    password: data.password,
+    email: data.email,
+    verification_code: data.verification_code,
+  })
 }
 
 // ==================== 极验滑动验证码 ====================
 
 // 极验验证码初始化响应类型
-export interface GeetestRegisterResponse {
+interface GeetestRegisterResponse {
   success: boolean
   code: number
   message: string
@@ -80,7 +144,7 @@ export interface GeetestRegisterResponse {
 }
 
 // 极验二次验证响应类型
-export interface GeetestValidateResponse {
+interface GeetestValidateResponse {
   success: boolean
   code: number
   message: string
@@ -88,7 +152,7 @@ export interface GeetestValidateResponse {
 
 // 获取极验验证码初始化参数
 export const getGeetestRegister = (): Promise<GeetestRegisterResponse> => {
-  return get('/geetest/register')
+  return get(`${GEETEST_PREFIX}/register`)
 }
 
 // 极验二次验证
@@ -97,20 +161,5 @@ export const geetestValidate = (data: {
   validate: string
   seccode: string
 }): Promise<GeetestValidateResponse> => {
-  return post('/geetest/validate', data)
-}
-
-// 获取登录验证码开关状态
-export const getLoginCaptchaStatus = async (): Promise<{ enabled: boolean }> => {
-  try {
-    const settings = await get<Record<string, any>>('/system-settings/public')
-    const value = settings.login_captcha_enabled
-    // 如果没有设置，默认开启
-    if (value === undefined || value === null) {
-      return { enabled: true }
-    }
-    return { enabled: value === true || value === 'true' || value === 1 || value === '1' }
-  } catch {
-    return { enabled: true }
-  }
+  return post(`${GEETEST_PREFIX}/validate`, data)
 }

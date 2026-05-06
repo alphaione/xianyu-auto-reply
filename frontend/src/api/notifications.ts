@@ -1,5 +1,8 @@
-import { del, get, post, put } from '@/utils/request'
-import type { ApiResponse, MessageNotification, NotificationChannel } from '@/types'
+import { get, post, put, del } from '@/utils/request'
+import type { ApiResponse, NotificationChannel, MessageNotification } from '@/types'
+
+const CHANNEL_PREFIX = '/api/v1/notification-channels'
+const MESSAGE_PREFIX = '/api/v1/message-notifications'
 
 // ========== 通知渠道 ==========
 
@@ -31,7 +34,7 @@ const serializeChannelConfig = (config: NotificationChannel['config'] | unknown)
 
 // 获取通知渠道列表
 export const getNotificationChannels = async (): Promise<{ success: boolean; data?: NotificationChannel[] }> => {
-  const result = await get<BackendChannel[]>('/notification-channels')
+  const result = await get<BackendChannel[]>(CHANNEL_PREFIX)
   // 后端直接返回数组，需要转换格式
   const channels: NotificationChannel[] = (result || []).map((item) => {
     let parsedConfig: Record<string, unknown> | undefined
@@ -69,7 +72,7 @@ export const addNotificationChannel = (data: Partial<NotificationChannel>): Prom
     // 后端期望 config 为字符串
     config: serializeChannelConfig(data.config),
   }
-  return post('/notification-channels', payload)
+  return post(CHANNEL_PREFIX, payload)
 }
 
 // 更新通知渠道
@@ -82,18 +85,17 @@ export const updateNotificationChannel = (channelId: string, data: Partial<Notif
     payload.config = serializeChannelConfig(data.config)
   }
 
-  return put(`/notification-channels/${channelId}`, payload)
+  return put(`${CHANNEL_PREFIX}/${channelId}`, payload)
 }
 
 // 删除通知渠道
 export const deleteNotificationChannel = (channelId: string): Promise<ApiResponse> => {
-  return del(`/notification-channels/${channelId}`)
+  return del(`${CHANNEL_PREFIX}/${channelId}`)
 }
 
-// 测试通知渠道 - 后端暂未实现此接口
-export const testNotificationChannel = async (_channelId: string): Promise<ApiResponse> => {
-  // TODO: 后端暂未实现 POST /notification-channels/{id}/test 接口
-  return { success: false, message: '通知渠道测试功能暂未实现' }
+// 测试通知渠道
+export const testNotificationChannel = (channelId: string): Promise<ApiResponse> => {
+  return post(`${CHANNEL_PREFIX}/${channelId}/test`)
 }
 
 // ========== 消息通知 ==========
@@ -110,13 +112,14 @@ interface BackendNotification {
 
 // 获取所有消息通知配置
 export const getMessageNotifications = async (): Promise<{ success: boolean; data?: MessageNotification[] }> => {
-  const result = await get<Record<string, BackendNotification[]>>('/message-notifications')
+  const result = await get<Record<string, BackendNotification[]>>(MESSAGE_PREFIX)
   // 将嵌套对象转换为数组
   const notifications: MessageNotification[] = []
   for (const [cookieId, channelList] of Object.entries(result || {})) {
     if (Array.isArray(channelList)) {
       for (const item of channelList) {
         notifications.push({
+          id: item.id,
           cookie_id: cookieId,
           channel_id: item.channel_id,
           channel_name: item.channel_name,
@@ -130,15 +133,15 @@ export const getMessageNotifications = async (): Promise<{ success: boolean; dat
 
 // 设置消息通知 - 后端接口需要 cookie_id 作为路径参数
 export const setMessageNotification = (cookieId: string, channelId: number, enabled: boolean): Promise<ApiResponse> => {
-  return post(`/message-notifications/${cookieId}`, { channel_id: channelId, enabled })
+  return post(`${MESSAGE_PREFIX}/${cookieId}`, { channel_id: channelId, enabled })
 }
 
 // 删除消息通知
 export const deleteMessageNotification = (notificationId: string): Promise<ApiResponse> => {
-  return del(`/message-notifications/${notificationId}`)
+  return del(`${MESSAGE_PREFIX}/${notificationId}`)
 }
 
 // 删除账号的所有消息通知
 export const deleteAccountNotifications = (cookieId: string): Promise<ApiResponse> => {
-  return del(`/message-notifications/account/${cookieId}`)
+  return del(`${MESSAGE_PREFIX}/account/${cookieId}`)
 }

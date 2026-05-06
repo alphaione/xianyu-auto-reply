@@ -281,8 +281,14 @@
     @apply bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden;
   }
 
+  /* 表格容器 - 支持横向滚动 */
+  .table-ios-container {
+    @apply overflow-x-auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
   .table-ios {
-    @apply w-full text-sm;
+    @apply w-full text-sm min-w-[800px];
   }
 
   .table-ios thead {
@@ -376,7 +382,7 @@
   }
 
   .modal-content {
-    @apply bg-white dark:bg-slate-800 rounded-lg shadow-2xl w-full max-w-lg max-h-[85vh]
+    @apply bg-white dark:bg-slate-800 rounded-lg shadow-2xl w-full max-w-lg max-h-[85vh] min-h-[320px]
            flex flex-col overflow-hidden
            animate-slide-up;
   }
@@ -411,11 +417,11 @@
 
   /* ==================== 统计卡片 ==================== */
   .stat-card {
-    @apply bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 p-5 flex items-center gap-4;
+    @apply bg-white dark:bg-slate-800 rounded-lg shadow-sm border border-slate-100 dark:border-slate-700 p-3 sm:p-4 flex items-center gap-3;
   }
 
   .stat-icon {
-    @apply w-12 h-12 rounded-lg flex items-center justify-center flex-shrink-0;
+    @apply w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0;
   }
 
   .stat-icon-primary {
@@ -435,11 +441,11 @@
   }
 
   .stat-value {
-    @apply text-2xl font-bold text-slate-900 dark:text-slate-100;
+    @apply text-xl sm:text-2xl font-bold text-slate-900 dark:text-slate-100 leading-none;
   }
 
   .stat-label {
-    @apply text-sm text-slate-500 dark:text-slate-400;
+    @apply text-xs sm:text-sm text-slate-500 dark:text-slate-400;
   }
 
   /* ==================== 页面头部 ==================== */
@@ -668,6 +674,31 @@
     display: none;
   }
 
+  /* 始终显示滚动条 */
+  .scrollbar-visible {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(148, 163, 184, 0.6) transparent;
+  }
+  
+  .scrollbar-visible::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  
+  .scrollbar-visible::-webkit-scrollbar-track {
+    background: rgba(226, 232, 240, 0.3);
+    border-radius: 4px;
+  }
+  
+  .scrollbar-visible::-webkit-scrollbar-thumb {
+    background: rgba(148, 163, 184, 0.6);
+    border-radius: 4px;
+  }
+  
+  .scrollbar-visible::-webkit-scrollbar-thumb:hover {
+    background: rgba(100, 116, 139, 0.8);
+  }
+
   /* 移动端优化 */
   @media (max-width: 640px) {
     /* 卡片优化 */
@@ -718,14 +749,18 @@
       @apply text-xs;
     }
     
-    /* 表格优化 */
+    /* 表格优化 - 移动端横向滚动 */
+    .table-ios {
+      @apply min-w-[600px];
+    }
+    
     .table-ios th,
     .table-ios td {
-      @apply px-2 py-2 text-xs;
+      @apply px-3 py-2.5 text-xs whitespace-nowrap;
     }
     
     .table-ios th {
-      @apply text-[10px];
+      @apply text-[11px];
     }
     
     /* 按钮优化 */
@@ -779,4 +814,22 @@
     box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.07),
                 0 2px 4px -2px rgb(0 0 0 / 0.05);
   }
+}
+
+/* ========================================
+   公告垂直滚动动画
+   ======================================== */
+@keyframes announcement-slide-in {
+  0% {
+    opacity: 0;
+    transform: translateY(100%);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.announcement-vertical-scroll {
+  animation: announcement-slide-in 0.5s ease-out;
 }

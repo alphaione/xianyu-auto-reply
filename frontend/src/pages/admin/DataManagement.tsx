@@ -5,6 +5,7 @@ import { useUIStore } from '@/store/uiStore'
 import { useAuthStore } from '@/store/authStore'
 import { PageLoading, ButtonLoading } from '@/components/common/Loading'
 import { Select } from '@/components/common/Select'
+import { ConfirmModal } from '@/components/common/ConfirmModal'
 
 // 可选择的数据表
 const tableOptions = [
@@ -15,7 +16,6 @@ const tableOptions = [
   { value: 'orders', label: '订单表' },
   { value: 'item_info', label: '商品信息表' },
   { value: 'notification_channels', label: '通知渠道表' },
-  { value: 'delivery_rules', label: '发货规则表' },
   { value: 'risk_control_logs', label: '风控日志表' },
 ]
 
@@ -28,6 +28,9 @@ export function DataManagement() {
   const [columns, setColumns] = useState<string[]>([])
   const [count, setCount] = useState(0)
   const [clearing, setClearing] = useState(false)
+
+  // 清空确认弹窗状态
+  const [clearConfirmStep, setClearConfirmStep] = useState<0 | 1 | 2>(0) // 0=关闭, 1=第一次确认, 2=第二次确认
 
   const loadTableData = async () => {
     if (!_hasHydrated || !isAuthenticated || !token) return
@@ -55,14 +58,12 @@ export function DataManagement() {
   }, [_hasHydrated, isAuthenticated, token, selectedTable])
 
   const handleClearTable = async () => {
-    if (!confirm(`确定要清空 ${tableOptions.find(t => t.value === selectedTable)?.label} 吗？此操作不可恢复！`)) return
-    if (!confirm('再次确认：是否真的要清空该表的所有数据？')) return
-
     try {
       setClearing(true)
       const result = await clearTableData(selectedTable)
       if (result.success) {
         addToast({ type: 'success', message: '清空成功' })
+        setClearConfirmStep(0)
         loadTableData()
       } else {
         addToast({ type: 'error', message: result.message || '清空失败' })
@@ -126,7 +127,7 @@ export function DataManagement() {
             {tableOptions.find(t => t.value === selectedTable)?.label || selectedTable}
           </h2>
           <button
-            onClick={handleClearTable}
+            onClick={() => setClearConfirmStep(1)}
             disabled={clearing || count === 0}
             className="btn-ios-danger text-sm"
           >
@@ -187,6 +188,31 @@ export function DataManagement() {
           )}
         </div>
       </div>
+
+      {/* 第一次确认弹窗 */}
+      <ConfirmModal
+        isOpen={clearConfirmStep === 1}
+        title="清空确认"
+        message={`确定要清空 ${tableOptions.find(t => t.value === selectedTable)?.label} 吗？此操作不可恢复！`}
+        confirmText="确定"
+        cancelText="取消"
+        type="danger"
+        onConfirm={() => setClearConfirmStep(2)}
+        onCancel={() => setClearConfirmStep(0)}
+      />
+
+      {/* 第二次确认弹窗 */}
+      <ConfirmModal
+        isOpen={clearConfirmStep === 2}
+        title="再次确认"
+        message="是否真的要清空该表的所有数据？"
+        confirmText="确定清空"
+        cancelText="取消"
+        type="danger"
+        loading={clearing}
+        onConfirm={handleClearTable}
+        onCancel={() => setClearConfirmStep(0)}
+      />
     </div>
   )
 }
